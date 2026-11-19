@@ -390,10 +390,11 @@ private val InstrumentSansFont: FontFamily by lazy {
     try {
         FontFamily(
             Font(R.font.instrument_sans_regular, FontWeight.Normal),
-            Font(R.font.instrument_sans_semibold, FontWeight.Medium),
+            Font(R.font.instrument_sans_medium, FontWeight.Medium),
             Font(R.font.instrument_sans_semibold, FontWeight.SemiBold),
-            Font(R.font.instrument_sans_bold, FontWeight.Bold),
-            Font(R.font.instrument_sans_bold, FontWeight.ExtraBold)
+            Font(R.font.instrument_sans_semibold, FontWeight.Bold),
+            Font(R.font.instrument_sans_bold, FontWeight.ExtraBold),
+            Font(R.font.instrument_sans_bold, FontWeight.Black)
         )
     } catch (_: Exception) {
         FontFamily.Default

@@ -22,6 +22,7 @@ data class IslandSettings(
     val timeout: Int = 5,
     val fontStyle: String = "ntype",
     val glassmorphism: Boolean = false,
+    val dynamicAlbumColor: Boolean = true,
 ) {
     fun toMap(): Map<String, Any> = mapOf(
         "width" to width, "height" to height, "offset" to offset, "horizontal" to horizontal,
@@ -30,6 +31,7 @@ data class IslandSettings(
         "haptics" to haptics, "outline" to outline, "autoHide" to autoHide, "hideApps" to hideApps,
         "mutedApps" to mutedApps, "timeout" to timeout, "fontStyle" to fontStyle,
         "glassmorphism" to glassmorphism,
+        "dynamicAlbumColor" to dynamicAlbumColor,
     )
     companion object {
         fun fromMap(m: Map<*, *>): IslandSettings {
@@ -46,6 +48,7 @@ data class IslandSettings(
                 (m["mutedApps"] as? String ?: d.mutedApps).take(10000), int("timeout", d.timeout, 3, 15),
                 (m["fontStyle"] as? String ?: d.fontStyle),
                 bool("glassmorphism", d.glassmorphism),
+                bool("dynamicAlbumColor", d.dynamicAlbumColor),
             )
         }
         fun load(context: Context): IslandSettings {

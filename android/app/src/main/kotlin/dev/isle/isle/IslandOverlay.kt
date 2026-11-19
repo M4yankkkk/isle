@@ -5,6 +5,7 @@ import android.media.AudioManager
 import android.media.session.PlaybackState
 import android.os.SystemClock
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -170,6 +171,26 @@ fun PanelOverlay(host: IslandService) {
         resolveFontFamily(settings.fontStyle)
     }
 
+    val albumPalette = remember(host.media?.artwork) {
+        extractAlbumPalette(host.media?.artwork)
+    }
+
+    val useAlbumColor = settings.glassmorphism && settings.dynamicAlbumColor && isMediaMode && albumPalette.hasColor
+
+    val targetTopColor = if (useAlbumColor) albumPalette.topTint else Color(0xF5121217)
+    val targetBottomColor = if (useAlbumColor) albumPalette.bottomTint else Color(0xFA09090C)
+
+    val animTopColor by animateColorAsState(
+        targetValue = targetTopColor,
+        animationSpec = tween(durationMillis = 300),
+        label = "glassTopColor"
+    )
+    val animBottomColor by animateColorAsState(
+        targetValue = targetBottomColor,
+        animationSpec = tween(durationMillis = 300),
+        label = "glassBottomColor"
+    )
+
     MaterialTheme(colorScheme = darkColorScheme(primary = Accent, surface = Color.Black)) {
         CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = selectedFont)) {
             Box(Modifier.fillMaxSize()) {
@@ -244,8 +265,8 @@ fun PanelOverlay(host: IslandService) {
                                 drawRoundRect(
                                     brush = Brush.verticalGradient(
                                         colors = listOf(
-                                            Color(0xF5121217),
-                                            Color(0xFA09090C)
+                                            animTopColor,
+                                            animBottomColor
                                         ),
                                         startY = curTop,
                                         endY = curTop + curH
@@ -771,6 +792,19 @@ private fun MediaCardContent(
         if (isScrubbing) scrubFraction else (currentPos.toFloat() / media.duration).coerceIn(0f, 1f)
     } else 0f
 
+    val albumPalette = remember(media.artwork) { extractAlbumPalette(media.artwork) }
+    val haloColor = if (albumPalette.hasColor) albumPalette.accentColor else Color(0x30FFFFFF)
+    val targetWaveColor = if (host.settings.dynamicAlbumColor && albumPalette.hasColor) {
+        albumPalette.accentColor
+    } else {
+        Color.White.copy(alpha = 0.88f)
+    }
+    val animWaveColor by animateColorAsState(
+        targetValue = targetWaveColor,
+        animationSpec = tween(durationMillis = 280),
+        label = "waveformColor"
+    )
+
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.SpaceBetween
@@ -781,7 +815,6 @@ private fun MediaCardContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Album Artwork with soft Ambient Glow
-            val glowColor = remember(media.artwork) { extractGlowColor(media.artwork) }
             Box(
                 modifier = Modifier
                     .size(54.dp)
@@ -802,8 +835,8 @@ private fun MediaCardContent(
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                glowColor.copy(alpha = 0.65f),
-                                glowColor.copy(alpha = 0.28f),
+                                haloColor.copy(alpha = 0.65f),
+                                haloColor.copy(alpha = 0.28f),
                                 Color.Transparent
                             ),
                             center = center,
@@ -874,7 +907,7 @@ private fun MediaCardContent(
             ) {
                 WaveformEqualizer(
                     playing = media.playing,
-                    color = Color(0xFFB088FF)
+                    color = animWaveColor
                 )
 
                 Box(
@@ -1238,33 +1271,74 @@ private fun PlayIcon(color: Color, modifier: Modifier = Modifier) {
     }
 }
 
-private fun extractGlowColor(bitmap: Bitmap?): Color {
-    if (bitmap == null) return Color(0xFF6E56FF)
+data class AlbumPalette(
+    val topTint: Color = Color(0xF5121217),
+    val bottomTint: Color = Color(0xFA09090C),
+    val accentColor: Color = Color.White.copy(alpha = 0.88f),
+    val hasColor: Boolean = false
+)
+
+private fun extractAlbumPalette(bitmap: Bitmap?): AlbumPalette {
+    val fallback = AlbumPalette()
+    if (bitmap == null) return fallback
     return try {
         val w = bitmap.width
         val h = bitmap.height
-        if (w <= 0 || h <= 0) return Color(0xFF6E56FF)
-        val p1 = bitmap.getPixel(w / 2, h / 2)
-        val p2 = bitmap.getPixel(w / 4, h / 4)
-        val p3 = bitmap.getPixel(3 * w / 4, h / 4)
-        val p4 = bitmap.getPixel(w / 4, 3 * h / 4)
-        val p5 = bitmap.getPixel(3 * w / 4, 3 * h / 4)
-        val pixels = listOf(p1, p2, p3, p4, p5)
+        if (w <= 0 || h <= 0) return fallback
 
-        var bestColor = Color(0xFF6E56FF)
-        var maxSat = -1f
+        var bestHue = 0f
+        var bestSat = 0f
+        var maxScore = -1f
+        var colorFound = false
+
         val hsv = FloatArray(3)
-        for (px in pixels) {
-            android.graphics.Color.colorToHSV(px, hsv)
-            val sat = hsv[1]
-            val value = hsv[2]
-            if (sat > maxSat && value > 0.20f) {
-                maxSat = sat
-                bestColor = Color(px)
+        val steps = 8
+        for (iy in 1 until steps) {
+            val y = (h * iy) / steps
+            for (ix in 1 until steps) {
+                val x = (w * ix) / steps
+                val px = bitmap.getPixel(x, y)
+                android.graphics.Color.colorToHSV(px, hsv)
+                val s = hsv[1]
+                val v = hsv[2]
+
+                // Consider pixels with noticeable color
+                if (s >= 0.16f && v >= 0.16f) {
+                    val score = s * 0.75f + v * 0.25f
+                    if (score > maxScore) {
+                        maxScore = score
+                        bestHue = hsv[0]
+                        bestSat = s
+                        colorFound = true
+                    }
+                }
             }
         }
-        if (maxSat < 0.15f) Color(0xFF6E56FF) else bestColor
+
+        if (!colorFound || bestSat < 0.16f) return fallback
+
+        // Top tint: rich dark smoky obsidian glass (96% opacity)
+        val topSat = (bestSat * 0.75f).coerceIn(0.35f, 0.60f)
+        val topVal = 0.18f
+        val topColorInt = android.graphics.Color.HSVToColor(0xF5, floatArrayOf(bestHue, topSat, topVal))
+
+        // Bottom tint: deep charcoal obsidian glass (98% opacity)
+        val botSat = topSat * 0.50f
+        val botVal = 0.08f
+        val botColorInt = android.graphics.Color.HSVToColor(0xFA, floatArrayOf(bestHue, botSat, botVal))
+
+        // Vibrant accent for waveform & halo glow
+        val accentSat = bestSat.coerceAtLeast(0.65f)
+        val accentVal = 0.95f
+        val accentColorInt = android.graphics.Color.HSVToColor(0xFF, floatArrayOf(bestHue, accentSat, accentVal))
+
+        AlbumPalette(
+            topTint = Color(topColorInt),
+            bottomTint = Color(botColorInt),
+            accentColor = Color(accentColorInt),
+            hasColor = true
+        )
     } catch (_: Exception) {
-        Color(0xFF6E56FF)
+        fallback
     }
 }

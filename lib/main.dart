@@ -135,6 +135,7 @@ class _IsleHomeState extends State<IsleHome> with WidgetsBindingObserver {
     'mutedApps': '',
     'fontStyle': 'ntype',
     'glassmorphism': false,
+    'dynamicAlbumColor': true,
   };
   Future<void> action(String method) async {
     setState(() {
@@ -459,6 +460,13 @@ class _IsleHomeState extends State<IsleHome> with WidgetsBindingObserver {
         'Polished dark obsidian glass with specular sheen and rim highlights.',
         'glassmorphism',
         Icons.blur_on_rounded,
+      ),
+      const Divider(),
+      toggle(
+        'Dynamic album tint',
+        'Tints the music player glass with colors sampled from album art.',
+        'dynamicAlbumColor',
+        Icons.palette_outlined,
       ),
       const Divider(),
       toggle(

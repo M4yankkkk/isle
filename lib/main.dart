@@ -134,6 +134,7 @@ class _IsleHomeState extends State<IsleHome> with WidgetsBindingObserver {
     'hideApps': 'com.google.android.apps.nbu.paisa.user,com.phonepe.app,net.one97.paytm',
     'mutedApps': '',
     'fontStyle': 'ntype',
+    'glassmorphism': false,
   };
   Future<void> action(String method) async {
     setState(() {
@@ -451,6 +452,13 @@ class _IsleHomeState extends State<IsleHome> with WidgetsBindingObserver {
         'Turn off for a transparent idle touch area.',
         'alwaysVisible',
         Icons.remove,
+      ),
+      const Divider(),
+      toggle(
+        'Frosted glassmorphism',
+        'Real-time background blur and translucent frosted glass styling.',
+        'glassmorphism',
+        Icons.blur_on_rounded,
       ),
       const Divider(),
       toggle(

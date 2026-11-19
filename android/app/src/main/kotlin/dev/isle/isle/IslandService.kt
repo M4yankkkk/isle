@@ -244,6 +244,10 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         val panFrame = panelRoot
         if (panP != null && panFrame != null) {
             panP.flags = (panP.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()) or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && settings.glassmorphism) {
+                panP.flags = panP.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                panP.setBlurBehindRadius(dp(36))
+            }
             try { windows.updateViewLayout(panFrame, panP) } catch (_: Exception) {}
         }
         state = state.open(user)
@@ -265,6 +269,10 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             val panFrame = panelRoot
             if (panP != null && panFrame != null) {
                 panP.flags = (panP.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) and WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH.inv()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    panP.flags = panP.flags and WindowManager.LayoutParams.FLAG_BLUR_BEHIND.inv()
+                    panP.setBlurBehindRadius(0)
+                }
                 try { windows.updateViewLayout(panFrame, panP) } catch (_: Exception) {}
             }
         }

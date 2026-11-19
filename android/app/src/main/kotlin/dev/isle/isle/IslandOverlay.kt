@@ -238,26 +238,62 @@ fun PanelOverlay(host: IslandService) {
                                 )
                             )
 
-                            // 1. Draw solid black container
-                            drawRoundRect(
-                                color = Color.Black,
-                                topLeft = Offset(curLeft, curTop),
-                                size = Size(curW, curH),
-                                cornerRadius = CornerRadius(curRadius, curRadius),
-                                alpha = alpha
-                            )
-
-                            // 2. Draw 1dp subtle glass rim highlight
-                            if (s > 0.06f) {
-                                val borderAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.16f
+                            // 1. Draw container (Frosted Glass vs OLED Solid Black)
+                            if (settings.glassmorphism) {
                                 drawRoundRect(
-                                    color = Color.White,
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xCC1A1A22),
+                                            Color(0xE0101014)
+                                        ),
+                                        startY = curTop,
+                                        endY = curTop + curH
+                                    ),
                                     topLeft = Offset(curLeft, curTop),
                                     size = Size(curW, curH),
                                     cornerRadius = CornerRadius(curRadius, curRadius),
-                                    style = Stroke(width = density),
-                                    alpha = borderAlpha * alpha
+                                    alpha = alpha
                                 )
+                            } else {
+                                drawRoundRect(
+                                    color = Color.Black,
+                                    topLeft = Offset(curLeft, curTop),
+                                    size = Size(curW, curH),
+                                    cornerRadius = CornerRadius(curRadius, curRadius),
+                                    alpha = alpha
+                                )
+                            }
+
+                            // 2. Draw glass rim highlight
+                            if (s > 0.06f) {
+                                if (settings.glassmorphism) {
+                                    val rimAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.45f
+                                    drawRoundRect(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = rimAlpha * alpha),
+                                                Color.White.copy(alpha = rimAlpha * 0.20f * alpha),
+                                                Color.White.copy(alpha = rimAlpha * 0.50f * alpha)
+                                            ),
+                                            startY = curTop,
+                                            endY = curTop + curH
+                                        ),
+                                        topLeft = Offset(curLeft, curTop),
+                                        size = Size(curW, curH),
+                                        cornerRadius = CornerRadius(curRadius, curRadius),
+                                        style = Stroke(width = 1.2f * density)
+                                    )
+                                } else {
+                                    val borderAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.16f
+                                    drawRoundRect(
+                                        color = Color.White,
+                                        topLeft = Offset(curLeft, curTop),
+                                        size = Size(curW, curH),
+                                        cornerRadius = CornerRadius(curRadius, curRadius),
+                                        style = Stroke(width = density),
+                                        alpha = borderAlpha * alpha
+                                    )
+                                }
                             }
 
                             // 3. Clip and draw inner composable content
@@ -432,6 +468,7 @@ private fun DashboardContent(
     val dayName = remember { SimpleDateFormat("EEEE", Locale.getDefault()).format(calendar.time) }
     val dateText = remember { SimpleDateFormat("d MMMM", Locale.getDefault()).format(calendar.time) }
     val density = LocalDensity.current.density
+    val isGlass = host.settings.glassmorphism
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -464,8 +501,12 @@ private fun DashboardContent(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(26.dp))
-                    .background(Color(0xFF16161A))
-                    .border(0.6.dp, Color(0xFF26262A), RoundedCornerShape(26.dp))
+                    .background(if (isGlass) Color(0x28FFFFFF) else Color(0xFF16161A))
+                    .border(
+                        if (isGlass) 1.dp else 0.6.dp,
+                        if (isGlass) Color(0x38FFFFFF) else Color(0xFF26262A),
+                        RoundedCornerShape(26.dp)
+                    )
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -548,6 +589,7 @@ private fun DashboardContent(
                 active = isTorchOn,
                 activeColor = Color(0xFF231C38),
                 activeBorderColor = Color(0xFF8A6CFF),
+                isGlass = isGlass,
                 interactive = interactive,
                 onClick = { host.toggleTorch() }
             )
@@ -578,6 +620,7 @@ private fun DashboardContent(
                 active = isRingerActive,
                 activeColor = Color(0xFF231C38),
                 activeBorderColor = Color(0xFF8A6CFF),
+                isGlass = isGlass,
                 interactive = interactive,
                 onClick = { host.toggleRinger() }
             )
@@ -595,6 +638,7 @@ private fun DashboardContent(
                 },
                 label = "Player",
                 active = false,
+                isGlass = isGlass,
                 interactive = interactive,
                 onClick = {
                     if (onShowPlayer != null) {
@@ -617,6 +661,7 @@ private fun DashboardContent(
                 },
                 label = "Timer",
                 active = false,
+                isGlass = isGlass,
                 interactive = interactive,
                 onClick = { host.openClockApp() }
             )
@@ -631,9 +676,22 @@ private fun DashboardActionTile(
     active: Boolean = false,
     activeColor: Color = Color(0xFF231C38),
     activeBorderColor: Color = Color(0xFF8A6CFF),
+    isGlass: Boolean = false,
     interactive: Boolean,
     onClick: () -> Unit
 ) {
+    val bg = when {
+        active -> if (isGlass) Color(0x668A6CFF) else activeColor
+        isGlass -> Color(0x28FFFFFF)
+        else -> Color(0xFF16161A)
+    }
+    val borderCol = when {
+        active -> if (isGlass) Color(0xFFC084FC) else activeBorderColor
+        isGlass -> Color(0x38FFFFFF)
+        else -> Color(0xFF242428)
+    }
+    val borderW = if (active || isGlass) 1.2.dp else 0.6.dp
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -642,14 +700,8 @@ private fun DashboardActionTile(
             modifier = Modifier
                 .size(56.dp)
                 .clip(RoundedCornerShape(22.dp))
-                .background(if (active) activeColor else Color(0xFF16161A))
-                .then(
-                    if (active) {
-                        Modifier.border(1.5.dp, activeBorderColor, RoundedCornerShape(22.dp))
-                    } else {
-                        Modifier.border(0.6.dp, Color(0xFF242428), RoundedCornerShape(22.dp))
-                    }
-                )
+                .background(bg)
+                .border(borderW, borderCol, RoundedCornerShape(22.dp))
                 .clickable(enabled = interactive, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
@@ -812,7 +864,7 @@ private fun MediaCardContent(
                     modifier = Modifier
                         .size(30.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF1E1E22))
+                        .background(if (host.settings.glassmorphism) Color(0x33FFFFFF) else Color(0xFF1E1E22))
                         .clickable(enabled = interactive, onClick = onShowDashboard),
                     contentAlignment = Alignment.Center
                 ) {

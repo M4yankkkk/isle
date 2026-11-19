@@ -389,10 +389,11 @@ private val NTypeFont: FontFamily by lazy {
 private val InstrumentSansFont: FontFamily by lazy {
     try {
         FontFamily(
-            Font(R.font.instrument_sans, FontWeight.Normal),
-            Font(R.font.instrument_sans, FontWeight.Medium),
-            Font(R.font.instrument_sans, FontWeight.SemiBold),
-            Font(R.font.instrument_sans, FontWeight.Bold)
+            Font(R.font.instrument_sans_regular, FontWeight.Normal),
+            Font(R.font.instrument_sans_semibold, FontWeight.Medium),
+            Font(R.font.instrument_sans_semibold, FontWeight.SemiBold),
+            Font(R.font.instrument_sans_bold, FontWeight.Bold),
+            Font(R.font.instrument_sans_bold, FontWeight.ExtraBold)
         )
     } catch (_: Exception) {
         FontFamily.Default
@@ -780,7 +781,7 @@ private fun MediaCardContent(
                 Text(
                     text = media.title,
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

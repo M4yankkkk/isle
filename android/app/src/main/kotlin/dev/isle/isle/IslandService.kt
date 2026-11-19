@@ -400,6 +400,37 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             } else intent.send()
         } catch (_: PendingIntent.CanceledException) { lastError = "That notification is no longer available." }
     }
+    fun openMediaApp() {
+        val m = media ?: return
+        val pkg = m.controller.packageName
+        collapse()
+        var launched = false
+        val sessionActivity = m.controller.sessionActivity
+        if (sessionActivity != null) {
+            try {
+                if (Build.VERSION.SDK_INT >= 34) {
+                    val options = ActivityOptions.makeBasic().setPendingIntentBackgroundActivityStartMode(
+                        if (Build.VERSION.SDK_INT >= 36) ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+                        else ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    )
+                    sessionActivity.send(this, 0, null, null, null, null, options.toBundle())
+                } else {
+                    sessionActivity.send()
+                }
+                launched = true
+            } catch (_: Exception) {}
+        }
+        if (!launched && pkg.isNotEmpty()) {
+            try {
+                val launchIntent = packageManager.getLaunchIntentForPackage(pkg)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                    startActivity(launchIntent)
+                    launched = true
+                }
+            } catch (_: Exception) {}
+        }
+    }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun readGeometry() {
         if (Build.VERSION.SDK_INT >= 30) {

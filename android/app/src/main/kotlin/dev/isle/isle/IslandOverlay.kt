@@ -172,11 +172,13 @@ fun PanelOverlay(host: IslandService) {
         resolveFontFamily(settings.fontStyle)
     }
 
-    val albumPalette = remember(host.media?.artwork) {
-        extractAlbumPalette(host.media?.artwork)
+    val isYouTube = isYouTubePackage(host.media?.controller?.packageName)
+
+    val albumPalette = remember(host.media?.artwork, isYouTube) {
+        if (isYouTube) YouTubePalette else extractAlbumPalette(host.media?.artwork)
     }
 
-    val useAlbumColor = settings.glassmorphism && settings.dynamicAlbumColor && isMediaMode && albumPalette.hasColor
+    val useAlbumColor = settings.glassmorphism && (settings.dynamicAlbumColor || isYouTube) && isMediaMode && albumPalette.hasColor
 
     val targetTopColor = if (useAlbumColor) albumPalette.topTint else Color(0xF5121217)
     val targetBottomColor = if (useAlbumColor) albumPalette.bottomTint else Color(0xFA09090C)
@@ -844,9 +846,12 @@ private fun MediaCardContent(
         label = "playheadRadius"
     )
 
-    val albumPalette = remember(media.artwork) { extractAlbumPalette(media.artwork) }
+    val isYouTube = isYouTubePackage(media.controller.packageName)
+    val albumPalette = remember(media.artwork, isYouTube) {
+        if (isYouTube) YouTubePalette else extractAlbumPalette(media.artwork)
+    }
     val haloColor = if (albumPalette.hasColor) albumPalette.accentColor else Color(0x30FFFFFF)
-    val targetWaveColor = if (host.settings.dynamicAlbumColor && albumPalette.hasColor) {
+    val targetWaveColor = if ((host.settings.dynamicAlbumColor || isYouTube) && albumPalette.hasColor) {
         albumPalette.accentColor
     } else {
         Color.White.copy(alpha = 0.88f)
@@ -875,10 +880,7 @@ private fun MediaCardContent(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
-                        try {
-                            media.controller.sessionActivity?.send()
-                            host.collapse()
-                        } catch (_: Exception) {}
+                        host.openMediaApp()
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -930,7 +932,14 @@ private fun MediaCardContent(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 14.dp),
+                    .padding(horizontal = 14.dp)
+                    .clickable(
+                        enabled = interactive,
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        host.openMediaApp()
+                    },
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
@@ -1071,7 +1080,7 @@ private fun MediaCardContent(
 
                     // 2. Active Progress Bar
                     if (progressW > 0f) {
-                        val activeBrush = if (host.settings.dynamicAlbumColor && albumPalette.hasColor) {
+                        val activeBrush = if ((host.settings.dynamicAlbumColor || isYouTube) && albumPalette.hasColor) {
                             Brush.horizontalGradient(
                                 colors = listOf(
                                     Color.White.copy(alpha = 0.92f),
@@ -1101,7 +1110,7 @@ private fun MediaCardContent(
 
                         // 3. Glowing Leading Playhead (Breathing Glow Cap)
                         if (media.playing && !isScrubbing && progressW > 4f) {
-                            val headColor = if (host.settings.dynamicAlbumColor && albumPalette.hasColor) {
+                            val headColor = if ((host.settings.dynamicAlbumColor || isYouTube) && albumPalette.hasColor) {
                                 albumPalette.accentColor
                             } else {
                                 Color.White
@@ -1439,6 +1448,19 @@ data class AlbumPalette(
     val bottomTint: Color = Color(0xFA09090C),
     val accentColor: Color = Color.White.copy(alpha = 0.88f),
     val hasColor: Boolean = false
+)
+
+private fun isYouTubePackage(pkg: String?): Boolean {
+    if (pkg == null) return false
+    val p = pkg.lowercase()
+    return p.contains("youtube") || p.contains("vanced") || p.contains("newpipe")
+}
+
+private val YouTubePalette = AlbumPalette(
+    topTint = Color(0xF5381014),      // Deep smoky ruby obsidian glass (96% opacity)
+    bottomTint = Color(0xFA14080A),   // Deep charcoal obsidian glass (98% opacity)
+    accentColor = Color(0xFFFF0033),  // Iconic YouTube Red
+    hasColor = true
 )
 
 private fun extractAlbumPalette(bitmap: Bitmap?): AlbumPalette {

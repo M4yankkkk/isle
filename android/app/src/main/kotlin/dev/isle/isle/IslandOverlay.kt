@@ -243,8 +243,8 @@ fun PanelOverlay(host: IslandService) {
                                 drawRoundRect(
                                     brush = Brush.verticalGradient(
                                         colors = listOf(
-                                            Color(0xCC1A1A22),
-                                            Color(0xE0101014)
+                                            Color(0x5E161620),
+                                            Color(0x820D0D12)
                                         ),
                                         startY = curTop,
                                         endY = curTop + curH
@@ -267,13 +267,13 @@ fun PanelOverlay(host: IslandService) {
                             // 2. Draw glass rim highlight
                             if (s > 0.06f) {
                                 if (settings.glassmorphism) {
-                                    val rimAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.45f
+                                    val rimAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.55f
                                     drawRoundRect(
                                         brush = Brush.verticalGradient(
                                             colors = listOf(
                                                 Color.White.copy(alpha = rimAlpha * alpha),
-                                                Color.White.copy(alpha = rimAlpha * 0.20f * alpha),
-                                                Color.White.copy(alpha = rimAlpha * 0.50f * alpha)
+                                                Color.White.copy(alpha = rimAlpha * 0.18f * alpha),
+                                                Color.White.copy(alpha = rimAlpha * 0.55f * alpha)
                                             ),
                                             startY = curTop,
                                             endY = curTop + curH
@@ -281,7 +281,7 @@ fun PanelOverlay(host: IslandService) {
                                         topLeft = Offset(curLeft, curTop),
                                         size = Size(curW, curH),
                                         cornerRadius = CornerRadius(curRadius, curRadius),
-                                        style = Stroke(width = 1.2f * density)
+                                        style = Stroke(width = 1.3f * density)
                                     )
                                 } else {
                                     val borderAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.16f

@@ -246,7 +246,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             panP.flags = (panP.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()) or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && settings.glassmorphism) {
                 panP.flags = panP.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-                panP.setBlurBehindRadius(dp(36))
+                panP.setBlurBehindRadius(dp(95))
             }
             try { windows.updateViewLayout(panFrame, panP) } catch (_: Exception) {}
         }

@@ -167,139 +167,141 @@ fun PanelOverlay(host: IslandService) {
     )
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Accent, surface = Color.Black)) {
-        Box(Modifier.fillMaxSize()) {
-            val clipPath = remember { Path() }
+        CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = NTypeFont)) {
+            Box(Modifier.fillMaxSize()) {
+                val clipPath = remember { Path() }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = panelTop.dp)
-                    .width(panelW.dp)
-                    .height(animatedCardHeight)
-                    .drawWithContent {
-                        val raw = morph.value
-                        val s = raw.coerceAtLeast(0f)
-                        if (s < 0.005f) return@drawWithContent
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = panelTop.dp)
+                        .width(panelW.dp)
+                        .height(animatedCardHeight)
+                        .drawWithContent {
+                            val raw = morph.value
+                            val s = raw.coerceAtLeast(0f)
+                            if (s < 0.005f) return@drawWithContent
 
-                        // Width is strictly clamped so it never exceeds panelW or cuts off on sides
-                        val px = if (isPillMode) {
-                            if (s <= 1f) s.pow(1.15f) else 1f
-                        } else {
-                            if (s <= 1f) s.pow(0.96f) else 1f
-                        }.coerceIn(0f, 1f)
+                            // Width is strictly clamped so it never exceeds panelW or cuts off on sides
+                            val px = if (isPillMode) {
+                                if (s <= 1f) s.pow(1.15f) else 1f
+                            } else {
+                                if (s <= 1f) s.pow(0.96f) else 1f
+                            }.coerceIn(0f, 1f)
 
-                        val py = if (isPillMode) {
-                            if (s <= 1f) s.pow(0.85f) else s
-                        } else {
-                            if (s <= 1f) s.pow(0.88f) else s
-                        }
+                            val py = if (isPillMode) {
+                                if (s <= 1f) s.pow(0.85f) else s
+                            } else {
+                                if (s <= 1f) s.pow(0.88f) else s
+                            }
 
-                        val pr = if (isPillMode) {
-                            if (s <= 1f) s.pow(1.4f) else 1f
-                        } else {
-                            if (s <= 1f) s.pow(1.3f) else 1f
-                        }
+                            val pr = if (isPillMode) {
+                                if (s <= 1f) s.pow(1.4f) else 1f
+                            } else {
+                                if (s <= 1f) s.pow(1.3f) else 1f
+                            }
 
-                        val startW_px = startW * density
-                        val startH_px = startH * density
-                        val panelW_px = size.width
-                        val panelH_px = size.height
+                            val startW_px = startW * density
+                            val startH_px = startH * density
+                            val panelW_px = size.width
+                            val panelH_px = size.height
 
-                        val curW = (startW_px + (panelW_px - startW_px) * px).coerceIn(startW_px, panelW_px)
-                        val curH = (startH_px + (panelH_px - startH_px) * py).coerceAtLeast(startH_px)
-                        val curTop = (py - 1f) * panelTop * density
-                        val curLeft = (size.width - curW) / 2f
+                            val curW = (startW_px + (panelW_px - startW_px) * px).coerceIn(startW_px, panelW_px)
+                            val curH = (startH_px + (panelH_px - startH_px) * py).coerceAtLeast(startH_px)
+                            val curTop = (py - 1f) * panelTop * density
+                            val curLeft = (size.width - curW) / 2f
 
-                        // Corner radius:
-                        // In transparent/no-pill mode: startW == startH == 34dp.
-                        // When s = 0: curW == curH == 34dp, circleRadius = 17dp -> A 100% PERFECT CIRCLE!
-                        // While closing: shrinks smoothly into a true circle centered on the camera lens!
-                        // When s = 1: curRadius = 28dp (squircle card).
-                        val minDim = minOf(curW, curH)
-                        val circleRadius = minDim / 2f
-                        val cardRadius = 28f * density
-                        val curRadius = circleRadius + (cardRadius - circleRadius) * pr
+                            // Corner radius:
+                            // In transparent/no-pill mode: startW == startH == 34dp.
+                            // When s = 0: curW == curH == 34dp, circleRadius = 17dp -> A 100% PERFECT CIRCLE!
+                            // While closing: shrinks smoothly into a true circle centered on the camera lens!
+                            // When s = 1: curRadius = 28dp (squircle card).
+                            val minDim = minOf(curW, curH)
+                            val circleRadius = minDim / 2f
+                            val cardRadius = 28f * density
+                            val curRadius = circleRadius + (cardRadius - circleRadius) * pr
 
-                        val alpha = if (s < 0.01f) 0f else if (s < 0.05f) (s - 0.01f) / 0.04f else 1f
+                            val alpha = if (s < 0.01f) 0f else if (s < 0.05f) (s - 0.01f) / 0.04f else 1f
 
-                        clipPath.rewind()
-                        clipPath.addRoundRect(
-                            RoundRect(
-                                left = curLeft,
-                                top = curTop,
-                                right = curLeft + curW,
-                                bottom = curTop + curH,
-                                cornerRadius = CornerRadius(curRadius, curRadius)
+                            clipPath.rewind()
+                            clipPath.addRoundRect(
+                                RoundRect(
+                                    left = curLeft,
+                                    top = curTop,
+                                    right = curLeft + curW,
+                                    bottom = curTop + curH,
+                                    cornerRadius = CornerRadius(curRadius, curRadius)
+                                )
                             )
-                        )
 
-                        // 1. Draw solid black container
-                        drawRoundRect(
-                            color = Color.Black,
-                            topLeft = Offset(curLeft, curTop),
-                            size = Size(curW, curH),
-                            cornerRadius = CornerRadius(curRadius, curRadius),
-                            alpha = alpha
-                        )
-
-                        // 2. Draw 1dp subtle glass rim highlight
-                        if (s > 0.06f) {
-                            val borderAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.16f
+                            // 1. Draw solid black container
                             drawRoundRect(
-                                color = Color.White,
+                                color = Color.Black,
                                 topLeft = Offset(curLeft, curTop),
                                 size = Size(curW, curH),
                                 cornerRadius = CornerRadius(curRadius, curRadius),
-                                style = Stroke(width = density),
-                                alpha = borderAlpha * alpha
+                                alpha = alpha
                             )
-                        }
 
-                        // 3. Clip and draw inner composable content
-                        clipPath(clipPath) {
-                            this@drawWithContent.drawContent()
-                        }
-                    }
-            ) {
-                val activeScreen = when {
-                    isNotificationMode -> 0
-                    isMediaMode -> 1
-                    else -> 2
-                }
+                            // 2. Draw 1dp subtle glass rim highlight
+                            if (s > 0.06f) {
+                                val borderAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.16f
+                                drawRoundRect(
+                                    color = Color.White,
+                                    topLeft = Offset(curLeft, curTop),
+                                    size = Size(curW, curH),
+                                    cornerRadius = CornerRadius(curRadius, curRadius),
+                                    style = Stroke(width = density),
+                                    alpha = borderAlpha * alpha
+                                )
+                            }
 
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(
-                            horizontal = if (isNotificationMode) 20.dp else 22.dp,
-                            vertical = if (isNotificationMode) 14.dp else if (isMediaMode) 18.dp else 20.dp
-                        )
-                        .graphicsLayer {
-                            val ca = contentAlpha.value
-                            this.alpha = ((ca - 0.10f) / 0.90f).coerceIn(0f, 1f)
-                            val scale = 0.92f + 0.08f * ca
-                            this.scaleX = scale
-                            this.scaleY = scale
-                            this.translationY = (1f - ca) * 6 * density
+                            // 3. Clip and draw inner composable content
+                            clipPath(clipPath) {
+                                this@drawWithContent.drawContent()
+                            }
                         }
                 ) {
-                    Crossfade(
-                        targetState = activeScreen,
-                        animationSpec = tween(durationMillis = 200),
-                        label = "screenTransition"
-                    ) { screen ->
-                        when (screen) {
-                            0 -> NotificationCardContent(host, interactive)
-                            1 -> MediaCardContent(
-                                host = host,
-                                interactive = interactive,
-                                onShowDashboard = { showDashboardOverride = true }
+                    val activeScreen = when {
+                        isNotificationMode -> 0
+                        isMediaMode -> 1
+                        else -> 2
+                    }
+
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(
+                                horizontal = if (isNotificationMode) 20.dp else 22.dp,
+                                vertical = if (isNotificationMode) 14.dp else if (isMediaMode) 18.dp else 20.dp
                             )
-                            else -> DashboardContent(
-                                host = host,
-                                interactive = interactive,
-                                onShowPlayer = if (host.media != null) { { showDashboardOverride = false } } else null
-                            )
+                            .graphicsLayer {
+                                val ca = contentAlpha.value
+                                this.alpha = ((ca - 0.10f) / 0.90f).coerceIn(0f, 1f)
+                                val scale = 0.92f + 0.08f * ca
+                                this.scaleX = scale
+                                this.scaleY = scale
+                                this.translationY = (1f - ca) * 6 * density
+                            }
+                    ) {
+                        Crossfade(
+                            targetState = activeScreen,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "screenTransition"
+                        ) { screen ->
+                            when (screen) {
+                                0 -> NotificationCardContent(host, interactive)
+                                1 -> MediaCardContent(
+                                    host = host,
+                                    interactive = interactive,
+                                    onShowDashboard = { showDashboardOverride = true }
+                                )
+                                else -> DashboardContent(
+                                    host = host,
+                                    interactive = interactive,
+                                    onShowPlayer = if (host.media != null) { { showDashboardOverride = false } } else null
+                                )
+                            }
                         }
                     }
                 }
@@ -364,6 +366,19 @@ private val NDotFont: FontFamily by lazy {
         FontFamily(Font(R.font.ndot57))
     } catch (_: Exception) {
         FontFamily.Monospace
+    }
+}
+
+private val NTypeFont: FontFamily by lazy {
+    try {
+        FontFamily(
+            Font(R.font.ntype82_regular, FontWeight.Normal),
+            Font(R.font.ntype82_regular, FontWeight.Medium),
+            Font(R.font.ntype82_headline, FontWeight.SemiBold),
+            Font(R.font.ntype82_headline, FontWeight.Bold)
+        )
+    } catch (_: Exception) {
+        FontFamily.Default
     }
 }
 

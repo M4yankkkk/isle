@@ -4,9 +4,11 @@ import android.graphics.Bitmap
 import android.media.AudioManager
 import android.media.session.PlaybackState
 import android.os.SystemClock
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -133,8 +135,36 @@ fun PanelOverlay(host: IslandService) {
     val startW = if (isPillMode) settings.width.toFloat() else settings.height.toFloat()
     val startH = settings.height.toFloat()
     val panelW = host.panelWidthDp
-    val panelH = host.panelHeightDp
     val panelTop = host.panelTopDp
+
+    var showDashboardOverride by remember { mutableStateOf(false) }
+    LaunchedEffect(expanded) {
+        if (!expanded) showDashboardOverride = false
+    }
+
+    val interactive = expanded && !suppressed
+    val isNotificationMode = host.peek != null
+    val isMediaMode = host.media != null && !host.chargePeek && !isNotificationMode && !showDashboardOverride
+
+    // Screen-specific target heights:
+    // - Media Player: 184dp (compact Apple Dynamic Island style)
+    // - Notification: 224dp
+    // - Dashboard / Homescreen: 220dp (generous, uncongested breathing room)
+    val targetCardHeight = when {
+        isNotificationMode -> 224.dp
+        isMediaMode -> 184.dp
+        else -> 220.dp
+    }
+
+    // Dynamic height morph animation when switching screens with Apple-like spring curve
+    val animatedCardHeight by animateDpAsState(
+        targetValue = targetCardHeight,
+        animationSpec = spring(
+            dampingRatio = 0.82f,
+            stiffness = 280f
+        ),
+        label = "islandCardHeight"
+    )
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Accent, surface = Color.Black)) {
         Box(Modifier.fillMaxSize()) {
@@ -145,7 +175,7 @@ fun PanelOverlay(host: IslandService) {
                     .align(Alignment.TopCenter)
                     .offset(y = panelTop.dp)
                     .width(panelW.dp)
-                    .height(panelH.dp)
+                    .height(animatedCardHeight)
                     .drawWithContent {
                         val raw = morph.value
                         val s = raw.coerceAtLeast(0f)
@@ -231,21 +261,18 @@ fun PanelOverlay(host: IslandService) {
                         }
                     }
             ) {
-                var showDashboardOverride by remember { mutableStateOf(false) }
-                LaunchedEffect(expanded) {
-                    if (!expanded) showDashboardOverride = false
+                val activeScreen = when {
+                    isNotificationMode -> 0
+                    isMediaMode -> 1
+                    else -> 2
                 }
-
-                val interactive = expanded && !suppressed
-                val isNotificationMode = host.peek != null
-                val isMediaMode = host.media != null && !host.chargePeek && !isNotificationMode && !showDashboardOverride
 
                 Box(
                     Modifier
                         .fillMaxSize()
                         .padding(
                             horizontal = if (isNotificationMode) 20.dp else 22.dp,
-                            vertical = if (isNotificationMode) 14.dp else 18.dp
+                            vertical = if (isNotificationMode) 14.dp else if (isMediaMode) 18.dp else 20.dp
                         )
                         .graphicsLayer {
                             val ca = contentAlpha.value
@@ -256,18 +283,24 @@ fun PanelOverlay(host: IslandService) {
                             this.translationY = (1f - ca) * 6 * density
                         }
                 ) {
-                    when {
-                        isNotificationMode -> NotificationCardContent(host, interactive)
-                        isMediaMode -> MediaCardContent(
-                            host = host,
-                            interactive = interactive,
-                            onShowDashboard = { showDashboardOverride = true }
-                        )
-                        else -> DashboardContent(
-                            host = host,
-                            interactive = interactive,
-                            onShowPlayer = if (host.media != null) { { showDashboardOverride = false } } else null
-                        )
+                    Crossfade(
+                        targetState = activeScreen,
+                        animationSpec = tween(durationMillis = 200),
+                        label = "screenTransition"
+                    ) { screen ->
+                        when (screen) {
+                            0 -> NotificationCardContent(host, interactive)
+                            1 -> MediaCardContent(
+                                host = host,
+                                interactive = interactive,
+                                onShowDashboard = { showDashboardOverride = true }
+                            )
+                            else -> DashboardContent(
+                                host = host,
+                                interactive = interactive,
+                                onShowPlayer = if (host.media != null) { { showDashboardOverride = false } } else null
+                            )
+                        }
                     }
                 }
             }

@@ -526,7 +526,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         panelHeightDp = if (peek != null) {
             224f + (resources.configuration.fontScale.coerceAtLeast(1f) - 1f) * 100f
         } else {
-            184f
+            220f
         }
 
         pP.width = dp(settings.width)
@@ -535,7 +535,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         pP.x = dp(settings.horizontal).coerceIn(-maxShiftPill, maxShiftPill)
 
         panP.width = ((panelWidthDp + 8f) * density).toInt()
-        panP.height = ((panelTopDp + maxOf(panelHeightDp, 224f) + 8f) * density).toInt()
+        panP.height = ((panelTopDp + 240f + 16f) * density).toInt()
         val maxShiftPanel = ((screenWidth - panP.width) / 2).coerceAtLeast(0)
         panP.x = dp(settings.horizontal).coerceIn(-maxShiftPanel, maxShiftPanel)
 

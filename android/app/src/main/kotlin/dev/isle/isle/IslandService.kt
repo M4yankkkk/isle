@@ -38,6 +38,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     var battery by mutableIntStateOf(-1); private set
     var charging by mutableStateOf(false); private set
     var media by mutableStateOf<MediaInfo?>(null); private set
+    var clockActivity by mutableStateOf<ClockActivity?>(null); private set
     var peek by mutableStateOf<NotificationPeek?>(null); private set
     var chargePeek by mutableStateOf(false); private set
     var torchOn by mutableStateOf(false); private set
@@ -198,7 +199,7 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         if (peek?.key == key) { peek = null; if (!state.pinnedByUser) collapse() }
     }
     fun notificationAccessLost() { peek = null; mediaChanged() }
-    private fun hasActivity() = (settings.charging && charging) || media?.playing == true
+    private fun hasActivity() = (settings.charging && charging) || media?.playing == true || clockActivity?.running == true
     private fun deviceAvailable(): Boolean = getSystemService(PowerManager::class.java).isInteractive &&
         !getSystemService(KeyguardManager::class.java).isKeyguardLocked &&
         resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
@@ -429,6 +430,134 @@ class IslandService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     launched = true
                 }
             } catch (_: Exception) {}
+        }
+    }
+
+    fun clockNotificationPosted(activity: ClockActivity) {
+        clockActivity = activity
+        refreshVisibility()
+    }
+
+    fun clockNotificationRemoved(pkg: String) {
+        if (clockActivity?.isSystemClock == true) {
+            clockActivity = null
+            refreshVisibility()
+        }
+    }
+
+    fun startStopwatch() {
+        val current = clockActivity
+        val elapsed = if (current?.mode == ClockMode.STOPWATCH && !current.running) current.remainingMillis else 0L
+        clockActivity = ClockActivity(
+            mode = ClockMode.STOPWATCH,
+            running = true,
+            baseTimeMillis = SystemClock.elapsedRealtime() - elapsed,
+            isSystemClock = false
+        )
+        refreshVisibility()
+    }
+
+    fun pauseStopwatch() {
+        val current = clockActivity ?: return
+        if (current.mode == ClockMode.STOPWATCH && current.running) {
+            if (current.pauseIntent != null) {
+                try { current.pauseIntent.send() } catch (_: Exception) {}
+            }
+            val elapsed = SystemClock.elapsedRealtime() - current.baseTimeMillis
+            clockActivity = current.copy(running = false, remainingMillis = elapsed)
+        }
+    }
+
+    fun resumeStopwatch() {
+        val current = clockActivity ?: return
+        if (current.mode == ClockMode.STOPWATCH && !current.running) {
+            if (current.resumeIntent != null) {
+                try { current.resumeIntent.send() } catch (_: Exception) {}
+            }
+            clockActivity = current.copy(
+                running = true,
+                baseTimeMillis = SystemClock.elapsedRealtime() - current.remainingMillis
+            )
+        }
+    }
+
+    fun resetStopwatch() {
+        val current = clockActivity
+        if (current?.resetIntent != null) {
+            try { current.resetIntent.send() } catch (_: Exception) {}
+        }
+        clockActivity = null
+        refreshVisibility()
+    }
+
+    fun startTimer(durationSeconds: Long) {
+        val durationMs = durationSeconds * 1000L
+        val targetEnd = SystemClock.elapsedRealtime() + durationMs
+
+        try {
+            val timerIntent = Intent(android.provider.AlarmClock.ACTION_SET_TIMER).apply {
+                putExtra(android.provider.AlarmClock.EXTRA_LENGTH, durationSeconds.toInt())
+                putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, "Isle Timer")
+                putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(timerIntent)
+        } catch (_: Exception) {}
+
+        clockActivity = ClockActivity(
+            mode = ClockMode.TIMER,
+            running = true,
+            baseTimeMillis = targetEnd,
+            totalDurationMillis = durationMs,
+            isSystemClock = false
+        )
+        refreshVisibility()
+    }
+
+    fun pauseTimer() {
+        val current = clockActivity ?: return
+        if (current.mode == ClockMode.TIMER && current.running) {
+            if (current.pauseIntent != null) {
+                try { current.pauseIntent.send() } catch (_: Exception) {}
+            }
+            val remaining = (current.baseTimeMillis - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            clockActivity = current.copy(running = false, remainingMillis = remaining)
+        }
+    }
+
+    fun resumeTimer() {
+        val current = clockActivity ?: return
+        if (current.mode == ClockMode.TIMER && !current.running) {
+            if (current.resumeIntent != null) {
+                try { current.resumeIntent.send() } catch (_: Exception) {}
+            }
+            clockActivity = current.copy(
+                running = true,
+                baseTimeMillis = SystemClock.elapsedRealtime() + current.remainingMillis
+            )
+        }
+    }
+
+    fun stopTimer() {
+        val current = clockActivity
+        if (current?.resetIntent != null) {
+            try { current.resetIntent.send() } catch (_: Exception) {}
+        }
+        clockActivity = null
+        refreshVisibility()
+    }
+
+    fun addTimerMinute() {
+        val current = clockActivity ?: return
+        if (current.mode == ClockMode.TIMER) {
+            val newBase = current.baseTimeMillis + 60000L
+            val newDuration = current.totalDurationMillis + 60000L
+            val newRemaining = current.remainingMillis + 60000L
+            clockActivity = current.copy(
+                baseTimeMillis = newBase,
+                totalDurationMillis = newDuration,
+                remainingMillis = newRemaining
+            )
         }
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

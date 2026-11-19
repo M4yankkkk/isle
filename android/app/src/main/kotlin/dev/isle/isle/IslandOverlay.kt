@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.media.AudioManager
 import android.media.session.PlaybackState
 import android.os.SystemClock
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -16,6 +17,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -87,11 +93,26 @@ fun PillOverlay(host: IslandService) {
                 }
                 // A small static activity dot avoids covering the physical camera.
                 if (host.state.presentation == Presentation.COMPACT && settings.width >= 60) {
-                    drawCircle(
-                        if (host.charging && settings.charging) Accent else Color.White,
-                        2.5f * density,
-                        Offset(pillW - 12 * density, pillH / 2)
-                    )
+                    val hasClock = host.clockActivity?.running == true
+                    val hasMedia = host.media?.playing == true
+                    if (hasClock && hasMedia) {
+                        drawCircle(
+                            Color(0xFFB088FF),
+                            2.5f * density,
+                            Offset(pillW - 18 * density, pillH / 2)
+                        )
+                        drawCircle(
+                            if (host.charging && settings.charging) Accent else Color.White,
+                            2.5f * density,
+                            Offset(pillW - 8 * density, pillH / 2)
+                        )
+                    } else {
+                        drawCircle(
+                            if (hasClock) Color(0xFFB088FF) else if (host.charging && settings.charging) Accent else Color.White,
+                            2.5f * density,
+                            Offset(pillW - 12 * density, pillH / 2)
+                        )
+                    }
                 }
             }
         }
@@ -140,21 +161,30 @@ fun PanelOverlay(host: IslandService) {
     val panelTop = host.panelTopDp
 
     var showDashboardOverride by remember { mutableStateOf(false) }
+    var userRequestedClock by remember { mutableStateOf(false) }
     LaunchedEffect(expanded) {
-        if (!expanded) showDashboardOverride = false
+        if (!expanded) {
+            showDashboardOverride = false
+            userRequestedClock = false
+        }
     }
 
     val interactive = expanded && !suppressed
     val isNotificationMode = host.peek != null
-    val isMediaMode = host.media != null && !host.chargePeek && !isNotificationMode && !showDashboardOverride
+    val hasMedia = host.media != null && !host.chargePeek
+    val hasClock = host.clockActivity != null || userRequestedClock
+
+    val isMultiMode = hasMedia && hasClock && !isNotificationMode && !showDashboardOverride
+    val isMediaMode = hasMedia && !hasClock && !isNotificationMode && !showDashboardOverride
+    val isClockMode = hasClock && !hasMedia && !isNotificationMode && !showDashboardOverride
 
     // Screen-specific target heights:
-    // - Media Player: 184dp (compact Apple Dynamic Island style)
+    // - Media Player / Clock / Multi-Activity: 184dp (compact Apple Dynamic Island style)
     // - Notification: 224dp
     // - Dashboard / Homescreen: 220dp (generous, uncongested breathing room)
     val targetCardHeight = when {
         isNotificationMode -> 224.dp
-        isMediaMode -> 184.dp
+        isMediaMode || isClockMode || isMultiMode -> 184.dp
         else -> 220.dp
     }
 
@@ -178,7 +208,7 @@ fun PanelOverlay(host: IslandService) {
         if (isYouTube) YouTubePalette else extractAlbumPalette(host.media?.artwork)
     }
 
-    val useAlbumColor = settings.glassmorphism && (settings.dynamicAlbumColor || isYouTube) && isMediaMode && albumPalette.hasColor
+    val useAlbumColor = settings.glassmorphism && (settings.dynamicAlbumColor || isYouTube) && (isMediaMode || isMultiMode) && albumPalette.hasColor
 
     val targetTopColor = if (useAlbumColor) albumPalette.topTint else Color(0xFA121217)
     val targetBottomColor = if (useAlbumColor) albumPalette.bottomTint else Color(0xFD09090C)
@@ -345,8 +375,10 @@ fun PanelOverlay(host: IslandService) {
                 ) {
                     val activeScreen = when {
                         isNotificationMode -> 0
-                        isMediaMode -> 1
-                        else -> 2
+                        isMultiMode -> 1
+                        isMediaMode -> 2
+                        isClockMode -> 3
+                        else -> 4
                     }
 
                     Box(
@@ -354,7 +386,7 @@ fun PanelOverlay(host: IslandService) {
                             .fillMaxSize()
                             .padding(
                                 horizontal = if (isNotificationMode) 20.dp else 22.dp,
-                                vertical = if (isNotificationMode) 14.dp else if (isMediaMode) 18.dp else 20.dp
+                                vertical = if (isNotificationMode) 14.dp else if (isMediaMode || isClockMode || isMultiMode) 18.dp else 20.dp
                             )
                             .graphicsLayer {
                                 val ca = contentAlpha.value
@@ -372,7 +404,17 @@ fun PanelOverlay(host: IslandService) {
                         ) { screen ->
                             when (screen) {
                                 0 -> NotificationCardContent(host, interactive)
-                                1 -> MediaCardContent(
+                                1 -> MultiActivityCardContent(
+                                    host = host,
+                                    interactive = interactive,
+                                    onShowDashboard = { showDashboardOverride = true }
+                                )
+                                2 -> MediaCardContent(
+                                    host = host,
+                                    interactive = interactive,
+                                    onShowDashboard = { showDashboardOverride = true }
+                                )
+                                3 -> ClockCardContent(
                                     host = host,
                                     interactive = interactive,
                                     onShowDashboard = { showDashboardOverride = true }
@@ -380,7 +422,8 @@ fun PanelOverlay(host: IslandService) {
                                 else -> DashboardContent(
                                     host = host,
                                     interactive = interactive,
-                                    onShowPlayer = if (host.media != null) { { showDashboardOverride = false } } else null
+                                    onShowPlayer = if (host.media != null) { { showDashboardOverride = false; userRequestedClock = false } } else null,
+                                    onShowClock = { showDashboardOverride = false; userRequestedClock = true }
                                 )
                             }
                         }
@@ -503,7 +546,8 @@ private fun resolveFontFamily(style: String): FontFamily = when (style.lowercase
 private fun DashboardContent(
     host: IslandService,
     interactive: Boolean,
-    onShowPlayer: (() -> Unit)? = null
+    onShowPlayer: (() -> Unit)? = null,
+    onShowClock: (() -> Unit)? = null
 ) {
     val calendar = remember { Calendar.getInstance() }
     val dayName = remember { SimpleDateFormat("EEEE", Locale.getDefault()).format(calendar.time) }
@@ -691,20 +735,31 @@ private fun DashboardContent(
             )
 
             // Action 4: Clock / Timer
+            val hasClock = host.clockActivity != null
             DashboardActionTile(
                 icon = {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_lucide_timer),
                         contentDescription = "Timer",
-                        tint = Color.White,
+                        tint = if (hasClock) Color(0xFFB088FF) else Color.White,
                         modifier = Modifier.size(22.dp)
                     )
                 },
-                label = "Timer",
-                active = false,
+                label = if (hasClock) {
+                    if (host.clockActivity?.mode == ClockMode.STOPWATCH) "Stopwatch" else "Timer"
+                } else "Timer",
+                active = hasClock,
+                activeColor = Color(0xFF231C38),
+                activeBorderColor = Color(0xFF8A6CFF),
                 isGlass = isGlass,
                 interactive = interactive,
-                onClick = { host.openClockApp() }
+                onClick = {
+                    if (onShowClock != null) {
+                        onShowClock()
+                    } else {
+                        host.startStopwatch()
+                    }
+                }
             )
         }
     }
@@ -761,7 +816,8 @@ private fun DashboardActionTile(
 private fun MediaCardContent(
     host: IslandService,
     interactive: Boolean,
-    onShowDashboard: () -> Unit = {}
+    onShowDashboard: () -> Unit = {},
+    hideTopBar: Boolean = false
 ) {
     val media = host.media ?: return
 
@@ -971,20 +1027,22 @@ private fun MediaCardContent(
                     color = animWaveColor
                 )
 
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(if (host.settings.glassmorphism) Color(0x33FFFFFF) else Color(0xFF1E1E22))
-                        .clickable(enabled = interactive, onClick = onShowDashboard),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_lucide_layout_grid),
-                        contentDescription = "Dashboard",
-                        tint = Color.White.copy(alpha = 0.75f),
-                        modifier = Modifier.size(13.dp)
-                    )
+                if (!hideTopBar) {
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(if (host.settings.glassmorphism) Color(0x33FFFFFF) else Color(0xFF1E1E22))
+                            .clickable(enabled = interactive, onClick = onShowDashboard),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_lucide_layout_grid),
+                            contentDescription = "Dashboard",
+                            tint = Color.White.copy(alpha = 0.75f),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1251,6 +1309,472 @@ private fun MediaCardContent(
                     color = Color.White,
                     modifier = Modifier.size(24.dp, 16.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MultiActivityCardContent(
+    host: IslandService,
+    interactive: Boolean,
+    onShowDashboard: () -> Unit
+) {
+    // 0 = Media, 1 = Clock
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var dragAccumulator by remember { mutableFloatStateOf(0f) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(interactive) {
+                if (!interactive) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragStart = { dragAccumulator = 0f },
+                    onDragEnd = { dragAccumulator = 0f },
+                    onDragCancel = { dragAccumulator = 0f },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        dragAccumulator += dragAmount
+                        if (dragAccumulator > 36f && selectedTab == 1) {
+                            selectedTab = 0
+                            dragAccumulator = 0f
+                        } else if (dragAccumulator < -36f && selectedTab == 0) {
+                            selectedTab = 1
+                            dragAccumulator = 0f
+                        }
+                    }
+                )
+            },
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Shared Top Switcher Tabs Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Left tabs: [Music] [Timer / Stopwatch]
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Media tab chip
+                val isMediaSelected = selectedTab == 0
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (isMediaSelected) Color(0x33FFFFFF) else Color(0x14FFFFFF))
+                        .border(
+                            width = if (isMediaSelected) 1.dp else 0.5.dp,
+                            color = if (isMediaSelected) Color(0x60FFFFFF) else Color(0x20FFFFFF),
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .clickable(enabled = interactive) { selectedTab = 0 }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_lucide_music),
+                            contentDescription = "Music",
+                            tint = if (isMediaSelected) Color.White else Color(0xFF8E8E93),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = "Music",
+                            fontSize = 11.sp,
+                            fontWeight = if (isMediaSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isMediaSelected) Color.White else Color(0xFF8E8E93)
+                        )
+                    }
+                }
+
+                // Clock tab chip
+                val isClockSelected = selectedTab == 1
+                val isTimer = host.clockActivity?.mode == ClockMode.TIMER
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (isClockSelected) Color(0xFF2E204E) else Color(0x14FFFFFF))
+                        .border(
+                            width = if (isClockSelected) 1.dp else 0.5.dp,
+                            color = if (isClockSelected) Color(0xFFA78BFA) else Color(0x20FFFFFF),
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .clickable(enabled = interactive) { selectedTab = 1 }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_lucide_timer),
+                            contentDescription = "Clock",
+                            tint = if (isClockSelected) Color(0xFFB088FF) else Color(0xFF8E8E93),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = if (isTimer) "Timer" else "Stopwatch",
+                            fontSize = 11.sp,
+                            fontWeight = if (isClockSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isClockSelected) Color.White else Color(0xFF8E8E93)
+                        )
+                    }
+                }
+            }
+
+            // Right: Dashboard switch icon
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x24FFFFFF))
+                    .clickable(enabled = interactive, onClick = onShowDashboard),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_lucide_layout_grid),
+                    contentDescription = "Dashboard",
+                    tint = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
+
+        // Horizontal sliding content area
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (slideInHorizontally { width -> width } + fadeIn(tween(180)))
+                            .togetherWith(slideOutHorizontally { width -> -width } + fadeOut(tween(180)))
+                    } else {
+                        (slideInHorizontally { width -> -width } + fadeIn(tween(180)))
+                            .togetherWith(slideOutHorizontally { width -> width } + fadeOut(tween(180)))
+                    }
+                },
+                label = "multiActivitySlide"
+            ) { tab ->
+                when (tab) {
+                    0 -> MediaCardContent(
+                        host = host,
+                        interactive = interactive,
+                        onShowDashboard = onShowDashboard,
+                        hideTopBar = true
+                    )
+                    else -> ClockCardContent(
+                        host = host,
+                        interactive = interactive,
+                        onShowDashboard = onShowDashboard,
+                        hideTopBar = true
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClockCardContent(
+    host: IslandService,
+    interactive: Boolean,
+    onShowDashboard: () -> Unit = {},
+    hideTopBar: Boolean = false
+) {
+    val activity = host.clockActivity
+    val isTimer = activity?.mode == ClockMode.TIMER
+    val isRunning = activity?.running == true
+
+    var displayMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(activity?.running, activity?.baseTimeMillis, activity?.mode, activity?.remainingMillis) {
+        if (activity != null && activity.running) {
+            while (isActive) {
+                withFrameMillis {
+                    val now = SystemClock.elapsedRealtime()
+                    if (activity.mode == ClockMode.STOPWATCH) {
+                        displayMs = (now - activity.baseTimeMillis).coerceAtLeast(0L)
+                    } else {
+                        displayMs = (activity.baseTimeMillis - now).coerceAtLeast(0L)
+                    }
+                }
+            }
+        } else {
+            displayMs = activity?.remainingMillis ?: 0L
+        }
+    }
+
+    val isGlass = host.settings.glassmorphism
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // --- 1. Top Section (omitted if embedded inside multi-activity) ---
+        if (!hideTopBar) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Mode indicator chip
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (isRunning) Color(0xFFB088FF) else Color(0xFF8E8E93))
+                    )
+                    Text(
+                        text = if (isTimer) "TIMER" else "STOPWATCH",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.2.sp,
+                        color = if (isRunning) Color(0xFFB088FF) else Color(0xFF8E8E93)
+                    )
+                }
+
+                // Dashboard button
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(if (isGlass) Color(0x33FFFFFF) else Color(0xFF1E1E22))
+                        .clickable(enabled = interactive, onClick = onShowDashboard),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_lucide_layout_grid),
+                        contentDescription = "Dashboard",
+                        tint = Color.White.copy(alpha = 0.75f),
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
+            }
+        }
+
+        // --- 2. Main Digital Time & Progress Countdown ---
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = if (hideTopBar) 0.dp else 2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (isTimer) {
+                // Formatted timer: MM:SS or HH:MM:SS
+                val totalSec = (displayMs / 1000).coerceAtLeast(0L)
+                val hours = totalSec / 3600
+                val mins = (totalSec % 3600) / 60
+                val secs = totalSec % 60
+                val timerString = if (hours > 0) {
+                    "%02d:%02d:%02d".format(hours, mins, secs)
+                } else {
+                    "%02d:%02d".format(mins, secs)
+                }
+
+                Text(
+                    text = timerString,
+                    fontSize = if (hours > 0) 30.sp else 36.sp,
+                    fontFamily = NDotFont,
+                    color = Color.White,
+                    letterSpacing = 2.sp,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontFeatureSettings = "tnum"
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Linear Timer Progress Bar
+                val totalDur = activity?.totalDurationMillis?.takeIf { it > 0L } ?: 300000L
+                val progress = (displayMs.toFloat() / totalDur).coerceIn(0f, 1f)
+
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(3.5.dp)
+                ) {
+                    val w = size.width
+                    val h = size.height
+                    val r = h / 2f
+                    // Track
+                    drawRoundRect(
+                        color = Color(0x28FFFFFF),
+                        size = Size(w, h),
+                        cornerRadius = CornerRadius(r, r)
+                    )
+                    // Active bar
+                    if (progress > 0f) {
+                        drawRoundRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Color(0xFF8A6CFF), Color(0xFFB088FF))
+                            ),
+                            size = Size(w * progress, h),
+                            cornerRadius = CornerRadius(r, r)
+                        )
+                    }
+                }
+            } else {
+                // Formatted Stopwatch: MM:SS.cs
+                val mins = displayMs / 60000
+                val secs = (displayMs % 60000) / 1000
+                val centis = (displayMs % 1000) / 10
+
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "%02d:%02d".format(mins, secs),
+                        fontSize = 36.sp,
+                        fontFamily = NDotFont,
+                        color = Color.White,
+                        letterSpacing = 2.sp,
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontFeatureSettings = "tnum"
+                        )
+                    )
+                    Text(
+                        text = ".%02d".format(centis),
+                        fontSize = 24.sp,
+                        fontFamily = NDotFont,
+                        color = Color(0xFFA0A0A5),
+                        modifier = Modifier.padding(bottom = 2.dp),
+                        style = androidx.compose.ui.text.TextStyle(
+                            fontFeatureSettings = "tnum"
+                        )
+                    )
+                }
+            }
+        }
+
+        // --- 3. Bottom Controls ---
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Button 1 (Left): Reset / Stop
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF1E1E26))
+                    .border(0.8.dp, Color(0x30FFFFFF), CircleShape)
+                    .clickable(
+                        enabled = interactive,
+                        onClick = {
+                            if (isTimer) host.stopTimer() else host.resetStopwatch()
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Reset",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFCCCCCC)
+                )
+            }
+
+            // Button 2 (Center Primary): Start / Pause / Resume
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(if (isRunning) Color(0xFF2E204E) else Color(0xFF22222A))
+                    .border(
+                        1.2.dp,
+                        if (isRunning) Color(0xFFA78BFA) else Color(0x40FFFFFF),
+                        CircleShape
+                    )
+                    .clickable(
+                        enabled = interactive,
+                        onClick = {
+                            if (activity == null) {
+                                host.startStopwatch()
+                            } else if (activity.running) {
+                                if (isTimer) host.pauseTimer() else host.pauseStopwatch()
+                            } else {
+                                if (isTimer) host.resumeTimer() else host.resumeStopwatch()
+                            }
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isRunning) {
+                    PauseIcon(
+                        color = Color(0xFFD4BFFF),
+                        modifier = Modifier.size(16.dp, 20.dp)
+                    )
+                } else {
+                    PlayIcon(
+                        color = Color.White,
+                        modifier = Modifier.size(20.dp, 20.dp)
+                    )
+                }
+            }
+
+            // Button 3 (Right): +1m for timer OR 5 min for stopwatch
+            if (isTimer) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E1E26))
+                        .border(0.8.dp, Color(0x30FFFFFF), CircleShape)
+                        .clickable(
+                            enabled = interactive,
+                            onClick = { host.addTimerMinute() }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "+1m",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFB088FF)
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E1E26))
+                        .border(0.8.dp, Color(0x30FFFFFF), CircleShape)
+                        .clickable(
+                            enabled = interactive,
+                            onClick = { host.startTimer(300L) }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "5 min",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFB088FF)
+                    )
+                }
             }
         }
     }

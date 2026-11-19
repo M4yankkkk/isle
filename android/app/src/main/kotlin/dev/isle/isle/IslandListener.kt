@@ -9,12 +9,31 @@ import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
- data class MediaInfo(
+enum class ClockMode {
+    STOPWATCH,
+    TIMER
+}
+
+data class ClockActivity(
+    val mode: ClockMode,
+    val running: Boolean,
+    val baseTimeMillis: Long,
+    val totalDurationMillis: Long = 0L,
+    val remainingMillis: Long = 0L,
+    val pauseIntent: PendingIntent? = null,
+    val resumeIntent: PendingIntent? = null,
+    val resetIntent: PendingIntent? = null,
+    val isSystemClock: Boolean = false
+)
+
+data class MediaInfo(
     val title: String, val artist: String, val playing: Boolean, val artwork: Bitmap?,
     val actions: Long, val duration: Long, val position: Long,
     val lastPositionUpdate: Long, val playbackSpeed: Float, val controller: MediaController,
@@ -129,8 +148,66 @@ class IslandListener : NotificationListenerService() {
     }
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val host = IslandService.current ?: return
-        val settings = IslandSettings.load(this)
         val n = sbn.notification
+        val pkg = sbn.packageName.lowercase()
+        val isClock = pkg.contains("deskclock") || pkg.contains("clock")
+        if (isClock && sbn.isOngoing) {
+            val isChronometer = n.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
+            val isStopwatch = n.category == Notification.CATEGORY_STOPWATCH ||
+                n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.lowercase()?.contains("stopwatch") == true
+            val isCountdown = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                n.extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN, false)
+            } else false
+
+            if (isChronometer || isStopwatch || isCountdown) {
+                val nowWall = System.currentTimeMillis()
+                val nowRealtime = SystemClock.elapsedRealtime()
+                val rawWhen = if (n.`when` > 0L) n.`when` else n.extras.getLong("android.chronometerBase", 0L)
+                val base = if (rawWhen > nowWall / 2) {
+                    rawWhen - (nowWall - nowRealtime)
+                } else if (rawWhen > 0L) {
+                    rawWhen
+                } else {
+                    nowRealtime
+                }
+
+                if (base > 0L) {
+                    val mode = if (isCountdown) ClockMode.TIMER else ClockMode.STOPWATCH
+                    var pauseIntent: PendingIntent? = null
+                    var resumeIntent: PendingIntent? = null
+                    var resetIntent: PendingIntent? = null
+
+                    n.actions?.forEach { act ->
+                        val actionTitle = act.title?.toString()?.lowercase().orEmpty()
+                        if (actionTitle.contains("pause") || actionTitle.contains("stop")) {
+                            pauseIntent = act.actionIntent
+                        } else if (actionTitle.contains("resume") || actionTitle.contains("start")) {
+                            resumeIntent = act.actionIntent
+                        } else if (actionTitle.contains("reset") || actionTitle.contains("dismiss") || actionTitle.contains("cancel")) {
+                            resetIntent = act.actionIntent
+                        }
+                    }
+
+                    val totalDuration = if (isCountdown && base > nowRealtime) (base - nowRealtime).coerceAtLeast(1000L) else 0L
+
+                    host.clockNotificationPosted(
+                        ClockActivity(
+                            mode = mode,
+                            running = true,
+                            baseTimeMillis = base,
+                            totalDurationMillis = totalDuration,
+                            pauseIntent = pauseIntent,
+                            resumeIntent = resumeIntent,
+                            resetIntent = resetIntent,
+                            isSystemClock = true
+                        )
+                    )
+                    return
+                }
+            }
+        }
+
+        val settings = IslandSettings.load(this)
         if (!settings.notifications || sbn.packageName == packageName || sbn.isOngoing ||
             n.flags and Notification.FLAG_GROUP_SUMMARY != 0 || n.category == Notification.CATEGORY_TRANSPORT ||
             n.visibility == Notification.VISIBILITY_SECRET || sbn.packageName in packageSet(settings.mutedApps)) return
@@ -145,7 +222,13 @@ class IslandListener : NotificationListenerService() {
             catch (_: Exception) { sbn.packageName }
         host.notificationPosted(NotificationPeek(sbn.key, label, title, body, n.contentIntent, sbn.packageName))
     }
-    override fun onNotificationRemoved(sbn: StatusBarNotification) { IslandService.current?.notificationRemoved(sbn.key) }
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        val host = IslandService.current ?: return
+        host.notificationRemoved(sbn.key)
+        if (sbn.packageName.lowercase().let { it.contains("deskclock") || it.contains("clock") }) {
+            host.clockNotificationRemoved(sbn.packageName)
+        }
+    }
     private fun clearMedia() {
         controllers.forEach { (c, cb) -> c.unregisterCallback(cb) }; controllers.clear()
         media = null

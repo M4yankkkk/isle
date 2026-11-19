@@ -455,8 +455,8 @@ class _IsleHomeState extends State<IsleHome> with WidgetsBindingObserver {
       ),
       const Divider(),
       toggle(
-        'Frosted glassmorphism',
-        'Real-time background blur and translucent frosted glass styling.',
+        'Tinted obsidian glass',
+        'Polished dark obsidian glass with specular sheen and rim highlights.',
         'glassmorphism',
         Icons.blur_on_rounded,
       ),

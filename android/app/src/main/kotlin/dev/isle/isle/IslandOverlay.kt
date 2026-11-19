@@ -238,19 +238,36 @@ fun PanelOverlay(host: IslandService) {
                                 )
                             )
 
-                            // 1. Draw container (Frosted Glass vs OLED Solid Black)
+                            // 1. Draw container (Obsidian Tinted Glass vs OLED Pitch Black)
                             if (settings.glassmorphism) {
+                                // Deep obsidian glass base: blocks underlying clock/widgets with 96% opacity
                                 drawRoundRect(
                                     brush = Brush.verticalGradient(
                                         colors = listOf(
-                                            Color(0x5E161620),
-                                            Color(0x820D0D12)
+                                            Color(0xF5121217),
+                                            Color(0xFA09090C)
                                         ),
                                         startY = curTop,
                                         endY = curTop + curH
                                     ),
                                     topLeft = Offset(curLeft, curTop),
                                     size = Size(curW, curH),
+                                    cornerRadius = CornerRadius(curRadius, curRadius),
+                                    alpha = alpha
+                                )
+
+                                // Soft top specular light reflection
+                                drawRoundRect(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = 0.08f * alpha),
+                                            Color.Transparent
+                                        ),
+                                        startY = curTop,
+                                        endY = curTop + curH * 0.40f
+                                    ),
+                                    topLeft = Offset(curLeft, curTop),
+                                    size = Size(curW, curH * 0.40f),
                                     cornerRadius = CornerRadius(curRadius, curRadius),
                                     alpha = alpha
                                 )
@@ -264,16 +281,16 @@ fun PanelOverlay(host: IslandService) {
                                 )
                             }
 
-                            // 2. Draw glass rim highlight
+                            // 2. Draw polished glass rim highlight
                             if (s > 0.06f) {
                                 if (settings.glassmorphism) {
-                                    val rimAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.55f
+                                    val rimAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.45f
                                     drawRoundRect(
                                         brush = Brush.verticalGradient(
                                             colors = listOf(
                                                 Color.White.copy(alpha = rimAlpha * alpha),
-                                                Color.White.copy(alpha = rimAlpha * 0.18f * alpha),
-                                                Color.White.copy(alpha = rimAlpha * 0.55f * alpha)
+                                                Color.White.copy(alpha = rimAlpha * 0.15f * alpha),
+                                                Color.White.copy(alpha = rimAlpha * 0.35f * alpha)
                                             ),
                                             startY = curTop,
                                             endY = curTop + curH
@@ -281,7 +298,7 @@ fun PanelOverlay(host: IslandService) {
                                         topLeft = Offset(curLeft, curTop),
                                         size = Size(curW, curH),
                                         cornerRadius = CornerRadius(curRadius, curRadius),
-                                        style = Stroke(width = 1.3f * density)
+                                        style = Stroke(width = 1.2f * density)
                                     )
                                 } else {
                                     val borderAlpha = ((s - 0.06f) / 0.25f).coerceIn(0f, 1f) * 0.16f
@@ -501,7 +518,7 @@ private fun DashboardContent(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(26.dp))
-                    .background(if (isGlass) Color(0x28FFFFFF) else Color(0xFF16161A))
+                    .background(if (isGlass) Color(0xFF1E1E26) else Color(0xFF16161A))
                     .border(
                         if (isGlass) 1.dp else 0.6.dp,
                         if (isGlass) Color(0x38FFFFFF) else Color(0xFF26262A),
@@ -681,13 +698,13 @@ private fun DashboardActionTile(
     onClick: () -> Unit
 ) {
     val bg = when {
-        active -> if (isGlass) Color(0x668A6CFF) else activeColor
-        isGlass -> Color(0x28FFFFFF)
+        active -> if (isGlass) Color(0xFF2E204E) else activeColor
+        isGlass -> Color(0xFF1E1E26)
         else -> Color(0xFF16161A)
     }
     val borderCol = when {
-        active -> if (isGlass) Color(0xFFC084FC) else activeBorderColor
-        isGlass -> Color(0x38FFFFFF)
+        active -> if (isGlass) Color(0xFFA78BFA) else activeBorderColor
+        isGlass -> Color(0x30FFFFFF)
         else -> Color(0xFF242428)
     }
     val borderW = if (active || isGlass) 1.2.dp else 0.6.dp

@@ -20,13 +20,14 @@ data class IslandSettings(
     val hideApps: String = "com.google.android.apps.nbu.paisa.user,com.phonepe.app,net.one97.paytm",
     val mutedApps: String = "",
     val timeout: Int = 5,
+    val fontStyle: String = "ntype",
 ) {
     fun toMap(): Map<String, Any> = mapOf(
         "width" to width, "height" to height, "offset" to offset, "horizontal" to horizontal,
         "touchExtension" to touchExtension, "alwaysVisible" to alwaysVisible, "charging" to charging,
         "media" to media, "notifications" to notifications, "reducedMotion" to reducedMotion,
         "haptics" to haptics, "outline" to outline, "autoHide" to autoHide, "hideApps" to hideApps,
-        "mutedApps" to mutedApps, "timeout" to timeout,
+        "mutedApps" to mutedApps, "timeout" to timeout, "fontStyle" to fontStyle,
     )
     companion object {
         fun fromMap(m: Map<*, *>): IslandSettings {
@@ -41,6 +42,7 @@ data class IslandSettings(
                 false, bool("haptics", d.haptics), bool("outline", d.outline),
                 bool("autoHide", d.autoHide), (m["hideApps"] as? String ?: d.hideApps).take(10000),
                 (m["mutedApps"] as? String ?: d.mutedApps).take(10000), int("timeout", d.timeout, 3, 15),
+                (m["fontStyle"] as? String ?: d.fontStyle),
             )
         }
         fun load(context: Context): IslandSettings {

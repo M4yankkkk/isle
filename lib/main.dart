@@ -133,6 +133,7 @@ class _IsleHomeState extends State<IsleHome> with WidgetsBindingObserver {
     'timeout': 5,
     'hideApps': 'com.google.android.apps.nbu.paisa.user,com.phonepe.app,net.one97.paytm',
     'mutedApps': '',
+    'fontStyle': 'ntype',
   };
   Future<void> action(String method) async {
     setState(() {
@@ -469,6 +470,19 @@ class _IsleHomeState extends State<IsleHome> with WidgetsBindingObserver {
       slider('Close after', 'timeout', 3, 15, unit: 's'),
     ]),
     const SizedBox(height: 20),
+    label('TYPOGRAPHY & FONT'),
+    card([
+      fontOption('Nothing NType82', 'Nothing OS signature clean sans-serif', 'ntype'),
+      const Divider(),
+      fontOption('Instrument Sans', 'Modern expressive editorial geometric sans', 'instrument'),
+      const Divider(),
+      fontOption('Inter', 'Neutral, highly legible grotesque sans', 'inter'),
+      const Divider(),
+      fontOption('Nothing NDot', 'Retro dot-matrix typography', 'ndot'),
+      const Divider(),
+      fontOption('System Default', 'Standard Android system font', 'system'),
+    ]),
+    const SizedBox(height: 20),
     label('CAMERA FIT'),
     card([
       slider('Width', 'width', 16, 220),
@@ -618,6 +632,45 @@ class _IsleHomeState extends State<IsleHome> with WidgetsBindingObserver {
           ),
         ],
       );
+  Widget fontOption(String name, String desc, String value) {
+    final selected = (settings['fontStyle'] as String? ?? 'ntype') == value;
+    return InkWell(
+      onTap: busy ? null : () => save('fontStyle', value),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                      color: selected ? accent : Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    desc,
+                    style: const TextStyle(fontSize: 12, color: secondary),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: selected ? accent : secondary,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Widget permissionLink() => TextButton(
     onPressed: busy ? null : () => action('notificationAccess'),
     child: const Text('Connect notification access'),

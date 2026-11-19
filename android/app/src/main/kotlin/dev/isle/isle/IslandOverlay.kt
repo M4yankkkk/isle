@@ -166,8 +166,12 @@ fun PanelOverlay(host: IslandService) {
         label = "islandCardHeight"
     )
 
+    val selectedFont = remember(settings.fontStyle) {
+        resolveFontFamily(settings.fontStyle)
+    }
+
     MaterialTheme(colorScheme = darkColorScheme(primary = Accent, surface = Color.Black)) {
-        CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = NTypeFont)) {
+        CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = selectedFont)) {
             Box(Modifier.fillMaxSize()) {
                 val clipPath = remember { Path() }
 
@@ -380,6 +384,40 @@ private val NTypeFont: FontFamily by lazy {
     } catch (_: Exception) {
         FontFamily.Default
     }
+}
+
+private val InstrumentSansFont: FontFamily by lazy {
+    try {
+        FontFamily(
+            Font(R.font.instrument_sans, FontWeight.Normal),
+            Font(R.font.instrument_sans, FontWeight.Medium),
+            Font(R.font.instrument_sans, FontWeight.SemiBold),
+            Font(R.font.instrument_sans, FontWeight.Bold)
+        )
+    } catch (_: Exception) {
+        FontFamily.Default
+    }
+}
+
+private val InterFont: FontFamily by lazy {
+    try {
+        FontFamily(
+            Font(R.font.inter_regular, FontWeight.Normal),
+            Font(R.font.inter_medium, FontWeight.Medium),
+            Font(R.font.inter_medium, FontWeight.SemiBold),
+            Font(R.font.inter_medium, FontWeight.Bold)
+        )
+    } catch (_: Exception) {
+        FontFamily.Default
+    }
+}
+
+private fun resolveFontFamily(style: String): FontFamily = when (style.lowercase()) {
+    "instrument" -> InstrumentSansFont
+    "inter" -> InterFont
+    "ndot" -> NDotFont
+    "system" -> FontFamily.Default
+    else -> NTypeFont
 }
 
 @Composable

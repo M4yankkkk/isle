@@ -180,8 +180,8 @@ fun PanelOverlay(host: IslandService) {
 
     val useAlbumColor = settings.glassmorphism && (settings.dynamicAlbumColor || isYouTube) && isMediaMode && albumPalette.hasColor
 
-    val targetTopColor = if (useAlbumColor) albumPalette.topTint else Color(0xF5121217)
-    val targetBottomColor = if (useAlbumColor) albumPalette.bottomTint else Color(0xFA09090C)
+    val targetTopColor = if (useAlbumColor) albumPalette.topTint else Color(0xFA121217)
+    val targetBottomColor = if (useAlbumColor) albumPalette.bottomTint else Color(0xFD09090C)
 
     val animTopColor by animateColorAsState(
         targetValue = targetTopColor,
@@ -1444,8 +1444,8 @@ private fun PlayIcon(color: Color, modifier: Modifier = Modifier) {
 }
 
 data class AlbumPalette(
-    val topTint: Color = Color(0xF5121217),
-    val bottomTint: Color = Color(0xFA09090C),
+    val topTint: Color = Color(0xFA121217),
+    val bottomTint: Color = Color(0xFD09090C),
     val accentColor: Color = Color.White.copy(alpha = 0.88f),
     val hasColor: Boolean = false
 )
@@ -1457,8 +1457,8 @@ private fun isYouTubePackage(pkg: String?): Boolean {
 }
 
 private val YouTubePalette = AlbumPalette(
-    topTint = Color(0xF5381014),      // Deep smoky ruby obsidian glass (96% opacity)
-    bottomTint = Color(0xFA14080A),   // Deep charcoal obsidian glass (98% opacity)
+    topTint = Color(0xFA381014),      // Deep smoky ruby obsidian glass (98% opacity)
+    bottomTint = Color(0xFD14080A),   // Deep charcoal obsidian glass (99% opacity)
     accentColor = Color(0xFFFF0033),  // Iconic YouTube Red
     hasColor = true
 )
@@ -1502,15 +1502,15 @@ private fun extractAlbumPalette(bitmap: Bitmap?): AlbumPalette {
 
         if (!colorFound || bestSat < 0.16f) return fallback
 
-        // Top tint: rich dark smoky obsidian glass (96% opacity)
+        // Top tint: rich dark smoky obsidian glass (98% opacity)
         val topSat = (bestSat * 0.75f).coerceIn(0.35f, 0.60f)
         val topVal = 0.18f
-        val topColorInt = android.graphics.Color.HSVToColor(0xF5, floatArrayOf(bestHue, topSat, topVal))
+        val topColorInt = android.graphics.Color.HSVToColor(0xFA, floatArrayOf(bestHue, topSat, topVal))
 
-        // Bottom tint: deep charcoal obsidian glass (98% opacity)
+        // Bottom tint: deep charcoal obsidian glass (99% opacity)
         val botSat = topSat * 0.50f
         val botVal = 0.08f
-        val botColorInt = android.graphics.Color.HSVToColor(0xFA, floatArrayOf(bestHue, botSat, botVal))
+        val botColorInt = android.graphics.Color.HSVToColor(0xFD, floatArrayOf(bestHue, botSat, botVal))
 
         // Vibrant accent for waveform & halo glow
         val accentSat = bestSat.coerceAtLeast(0.65f)

@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -766,13 +767,16 @@ private fun MediaCardContent(
         mutableLongStateOf(media.position)
     }
 
+    val animProgress = remember { Animatable(0f) }
+
     LaunchedEffect(media.playing, media.position, media.lastPositionUpdate) {
         if (media.playing && media.duration > 0L) {
             while (isActive) {
-                val elapsed = SystemClock.elapsedRealtime() - media.lastPositionUpdate
-                val est = (media.position + (elapsed * media.playbackSpeed).toLong()).coerceIn(0L, media.duration)
-                currentPos = est
-                delay(400L)
+                withFrameMillis {
+                    val elapsed = SystemClock.elapsedRealtime() - media.lastPositionUpdate
+                    val est = (media.position + (elapsed * media.playbackSpeed).toLong()).coerceIn(0L, media.duration)
+                    currentPos = est
+                }
             }
         } else {
             currentPos = media.position
@@ -782,15 +786,63 @@ private fun MediaCardContent(
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubFraction by remember { mutableFloatStateOf(0f) }
 
+    // Elastic spring seek catchup
+    var lastKnownPos by remember { mutableLongStateOf(media.position) }
+    LaunchedEffect(media.position) {
+        if (!isScrubbing && media.duration > 0L && abs(media.position - lastKnownPos) > 1200L) {
+            val target = (media.position.toFloat() / media.duration).coerceIn(0f, 1f)
+            animProgress.animateTo(
+                targetValue = target,
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = 300f)
+            )
+        }
+        lastKnownPos = media.position
+    }
+
     val displayPos = if (isScrubbing && media.duration > 0L) {
         (scrubFraction * media.duration).toLong()
     } else {
         currentPos
     }
 
-    val progressFraction = if (media.duration > 0L) {
-        if (isScrubbing) scrubFraction else (currentPos.toFloat() / media.duration).coerceIn(0f, 1f)
-    } else 0f
+    val currentFraction = when {
+        isScrubbing -> scrubFraction
+        animProgress.isRunning -> animProgress.value
+        media.duration > 0L -> (currentPos.toFloat() / media.duration).coerceIn(0f, 1f)
+        else -> 0f
+    }
+
+    val trackHeight by animateDpAsState(
+        targetValue = if (isScrubbing) 8.dp else 4.dp,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 380f),
+        label = "trackHeight"
+    )
+
+    val thumbScale by animateFloatAsState(
+        targetValue = if (isScrubbing) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.70f, stiffness = 420f),
+        label = "thumbScale"
+    )
+
+    val pulseAnim = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by pulseAnim.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "playheadPulse"
+    )
+    val pulseRadius by pulseAnim.animateFloat(
+        initialValue = 6f,
+        targetValue = 11f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "playheadRadius"
+    )
 
     val albumPalette = remember(media.artwork) { extractAlbumPalette(media.artwork) }
     val haloColor = if (albumPalette.hasColor) albumPalette.accentColor else Color(0x30FFFFFF)
@@ -943,18 +995,22 @@ private fun MediaCardContent(
                 )
             )
 
+            val coroutineScope = rememberCoroutineScope()
             // Sleek pill-shaped progress seekbar
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 10.dp)
-                    .height(20.dp)
+                    .height(28.dp)
                     .pointerInput(interactive, media.duration) {
                         if (!interactive || media.duration <= 0L) return@pointerInput
                         detectTapGestures(
                             onPress = { offset ->
                                 isScrubbing = true
                                 scrubFraction = (offset.x / size.width).coerceIn(0f, 1f)
+                                coroutineScope.launch {
+                                    animProgress.snapTo(scrubFraction)
+                                }
                                 val targetMs = (scrubFraction * media.duration).toLong()
                                 tryAwaitRelease()
                                 isScrubbing = false
@@ -968,6 +1024,9 @@ private fun MediaCardContent(
                             onDragStart = { offset ->
                                 isScrubbing = true
                                 scrubFraction = (offset.x / size.width).coerceIn(0f, 1f)
+                                coroutineScope.launch {
+                                    animProgress.snapTo(scrubFraction)
+                                }
                             },
                             onDragEnd = {
                                 isScrubbing = false
@@ -980,27 +1039,131 @@ private fun MediaCardContent(
                             onHorizontalDrag = { change, _ ->
                                 change.consume()
                                 scrubFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                                coroutineScope.launch {
+                                    animProgress.snapTo(scrubFraction)
+                                }
                             }
                         )
                     },
                 contentAlignment = Alignment.Center
             ) {
-                // Background Track (4dp height)
-                Box(
+                val density = LocalDensity.current.density
+                Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(4.dp)
-                        .background(Color(0xFF2C2C2E), RoundedCornerShape(2.dp))
-                )
-                // Active White Progress (4dp height)
-                if (progressFraction > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progressFraction)
-                            .height(4.dp)
-                            .align(Alignment.CenterStart)
-                            .background(Color.White, RoundedCornerShape(2.dp))
+                        .height(28.dp)
+                ) {
+                    val w = size.width
+                    val h = size.height
+                    val centerY = h / 2f
+                    val currentTrackH = trackHeight.toPx()
+                    val trackRadius = currentTrackH / 2f
+                    val currentFrac = currentFraction.coerceIn(0f, 1f)
+                    val progressW = w * currentFrac
+
+                    // 1. Inactive Background Track
+                    drawRoundRect(
+                        color = Color(0x38FFFFFF),
+                        topLeft = Offset(0f, centerY - currentTrackH / 2f),
+                        size = Size(w, currentTrackH),
+                        cornerRadius = CornerRadius(trackRadius, trackRadius)
                     )
+
+                    // 2. Active Progress Bar
+                    if (progressW > 0f) {
+                        val activeBrush = if (host.settings.dynamicAlbumColor && albumPalette.hasColor) {
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.92f),
+                                    Color.White,
+                                    albumPalette.accentColor
+                                ),
+                                startX = 0f,
+                                endX = progressW
+                            )
+                        } else {
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.88f),
+                                    Color.White
+                                ),
+                                startX = 0f,
+                                endX = progressW
+                            )
+                        }
+
+                        drawRoundRect(
+                            brush = activeBrush,
+                            topLeft = Offset(0f, centerY - currentTrackH / 2f),
+                            size = Size(progressW, currentTrackH),
+                            cornerRadius = CornerRadius(trackRadius, trackRadius)
+                        )
+
+                        // 3. Glowing Leading Playhead (Breathing Glow Cap)
+                        if (media.playing && !isScrubbing && progressW > 4f) {
+                            val headColor = if (host.settings.dynamicAlbumColor && albumPalette.hasColor) {
+                                albumPalette.accentColor
+                            } else {
+                                Color.White
+                            }
+                            val glowR = pulseRadius * density
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        headColor.copy(alpha = pulseAlpha * 0.70f),
+                                        headColor.copy(alpha = pulseAlpha * 0.25f),
+                                        Color.Transparent
+                                    ),
+                                    center = Offset(progressW, centerY),
+                                    radius = glowR
+                                ),
+                                center = Offset(progressW, centerY),
+                                radius = glowR
+                            )
+                            // Playhead core dot
+                            drawCircle(
+                                color = Color.White,
+                                radius = currentTrackH / 2f,
+                                center = Offset(progressW, centerY)
+                            )
+                        }
+                    }
+
+                    // 4. Interactive Tactile Scrubber Thumb (Expands on touch)
+                    if (thumbScale > 0.01f) {
+                        val thumbR = (6.5f * density) * thumbScale
+                        val thumbGlowR = thumbR * 2.2f
+                        val thumbCenter = Offset(progressW.coerceIn(thumbR, w - thumbR), centerY)
+                        val accent = if (albumPalette.hasColor) albumPalette.accentColor else Color.White
+
+                        // Outer soft glow
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    accent.copy(alpha = 0.50f * thumbScale),
+                                    accent.copy(alpha = 0.15f * thumbScale),
+                                    Color.Transparent
+                                ),
+                                center = thumbCenter,
+                                radius = thumbGlowR
+                            ),
+                            center = thumbCenter,
+                            radius = thumbGlowR
+                        )
+
+                        // Inner solid crisp white thumb with subtle border
+                        drawCircle(
+                            color = Color.White,
+                            radius = thumbR,
+                            center = thumbCenter
+                        )
+                        drawCircle(
+                            color = Color(0x33000000),
+                            radius = thumbR,
+                            center = thumbCenter,
+                            style = Stroke(width = 1f * density)
+                        )
+                    }
                 }
             }
 
